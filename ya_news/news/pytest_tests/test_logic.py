@@ -1,43 +1,37 @@
 from http import HTTPStatus
 
 import pytest
-from django.urls import reverse
 from pytest_django.asserts import assertFormError, assertRedirects
 
 from news.forms import BAD_WORDS, WARNING
 from news.models import Comment
 
-from .constants import (AUTHOR_COMMENT, COMMENT_DELETE, COMMENT_EDIT,
-                        NEWS_DETAIL)
-from .functions import get_url
+from .constants import AUTHOR_COMMENT
+
+COMMENT_DATA_FORM = {'text': 'New comment'}
 
 
-@pytest.mark.django_db
-def test_anonymous_cant_comment(
-    client, news_object, comment_data_form
-):
-    client.post(get_url(NEWS_DETAIL, news_object.pk), comment_data_form)
-    assert 0 == Comment.objects.count()
+def test_anonymous_cant_comment(client, news_detail_url):
+    comments_before = Comment.objects.count()
+    client.post(news_detail_url, COMMENT_DATA_FORM)
+    comments_after = Comment.objects.count()
+    assert comments_before == comments_after
 
 
-@pytest.mark.django_db
-def test_auth_user_can_comment(
-    author, author_client, news_object, comment_data_form
-):
-    url = get_url(NEWS_DETAIL, news_object.pk)
-    response = author_client.post(url, comment_data_form)
+def test_auth_user_can_comment(author, author_client, news_detail_url):
+    Comment.objects.all().delete()
+    response = author_client.post(news_detail_url, COMMENT_DATA_FORM)
     assert Comment.objects.count() == 1
-    assertRedirects(response, f'{url}#comments')
+    assertRedirects(response, f'{news_detail_url}#comments')
     comment = Comment.objects.get()
     assert comment.author == author
-    assert comment.text == comment_data_form['text']
+    assert comment.text == COMMENT_DATA_FORM['text']
 
 
-@pytest.mark.django_db
-def test_user_cant_use_bad_words(author_client, news_object):
-    url = get_url(NEWS_DETAIL, news_object.pk)
-    bad_words_data = {'text': f'Some text, {BAD_WORDS[0]}, end'}
-    response = author_client.post(url, data=bad_words_data)
+@pytest.mark.parametrize('bad_word', BAD_WORDS)
+def test_user_cant_use_bad_words(author_client, news_detail_url, bad_word):
+    bad_words_data = {'text': f'Some text, {bad_word}, end'}
+    response = author_client.post(news_detail_url, data=bad_words_data)
     assertFormError(
         response,
         form='form',
@@ -48,53 +42,37 @@ def test_user_cant_use_bad_words(author_client, news_object):
     assert comments_count == 0
 
 
-@pytest.mark.django_db
 def test_author_can_edit_own_comments(
-    author_client, comment_of_author, comment_data_form
+        author_client, comment_of_author, comment_edit_url, news_detail_url
 ):
-    edit_url = get_url(COMMENT_EDIT, comment_of_author.pk)
-    expected_redirect = (
-        get_url(NEWS_DETAIL, comment_of_author.news.pk) + '#comments'
-    )
-    response = author_client.post(
-        edit_url,
-        comment_data_form
-    )
+    expected_redirect = news_detail_url + '#comments'
+    response = author_client.post(comment_edit_url, COMMENT_DATA_FORM)
     assertRedirects(response, expected_redirect)
     comment_of_author.refresh_from_db()
-    assert comment_of_author.text == comment_data_form['text']
+    assert comment_of_author.text == COMMENT_DATA_FORM['text']
 
 
-@pytest.mark.django_db
-def test_author_can_delete_own_comment(author_client, comment_of_author):
-    expected_redirect = (
-        get_url(NEWS_DETAIL, comment_of_author.news.pk) + '#comments'
-    )
-    response = author_client.post(
-        get_url(COMMENT_DELETE, comment_of_author.pk)
-    )
-    assertRedirects(response, expected_redirect)
-    assert Comment.objects.count() == 0
-
-
-@pytest.mark.django_db
-def test_not_author_cant_edit_comments(
-    not_author_client, comment_of_author, comment_data_form
+def test_author_can_delete_own_comment(
+        author_client, news_detail_url, comment_delete_url
 ):
-    edit_url = get_url(COMMENT_EDIT, comment_of_author.pk)
-    response = not_author_client.post(
-        edit_url,
-        comment_data_form
-    )
+    response = author_client.post(comment_delete_url)
+    assertRedirects(response, news_detail_url + '#comments')
+    assert Comment.objects.count() == 0
+    assert Comment.objects.exists() is False
+
+
+def test_not_author_cant_edit_comments(
+        not_author_client, comment_of_author, comment_edit_url
+):
+    response = not_author_client.post(comment_edit_url, COMMENT_DATA_FORM)
     assert response.status_code == HTTPStatus.NOT_FOUND
     comment_of_author.refresh_from_db()
     assert comment_of_author.text == AUTHOR_COMMENT
 
 
-@pytest.mark.django_db
-def test_not_author_cant_delete_comments(not_author_client, comment_of_author):
-    response = not_author_client.post(
-        reverse(COMMENT_DELETE, args=(comment_of_author.pk,))
-    )
+def test_not_author_cant_delete_comments(
+        not_author_client, comment_delete_url
+):
+    response = not_author_client.post(comment_delete_url)
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert Comment.objects.count() == 1

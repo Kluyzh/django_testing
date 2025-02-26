@@ -1,23 +1,20 @@
 import pytest
 from django.conf import settings
 
-from .constants import HOMEPAGE_URL, NEWS_DETAIL
-from .functions import get_url
+from news.forms import CommentForm
 
 
 @pytest.mark.usefixtures('bunch_of_news')
-@pytest.mark.django_db
-def test_num_of_news_on_main(client):
-    response = client.get(HOMEPAGE_URL)
+def test_num_of_news_on_main(client, homepage_url):
+    response = client.get(homepage_url)
     object_list = response.context['object_list']
     news_count = object_list.count()
     assert news_count == settings.NEWS_COUNT_ON_HOME_PAGE
 
 
 @pytest.mark.usefixtures('bunch_of_news')
-@pytest.mark.django_db
-def test_order_of_news(client):
-    response = client.get(HOMEPAGE_URL)
+def test_order_of_news(client, homepage_url):
+    response = client.get(homepage_url)
     object_list = response.context['object_list']
     all_dates = [news.date for news in object_list]
     sorted_dates = sorted(all_dates, reverse=True)
@@ -25,8 +22,8 @@ def test_order_of_news(client):
 
 
 @pytest.mark.usefixtures('bunch_of_comments')
-def test_oder_of_comments(client, news_object):
-    response = client.get(get_url(NEWS_DETAIL, news_object.pk))
+def test_oder_of_comments(client, news_detail_url):
+    response = client.get(news_detail_url)
     news = response.context['news']
     all_comments = news.comment_set.all()
     all_timestamps = [comment.created for comment in all_comments]
@@ -34,7 +31,6 @@ def test_oder_of_comments(client, news_object):
     assert all_timestamps == sorted_timestamps
 
 
-@pytest.mark.django_db
 @pytest.mark.parametrize(
     'user, is_there_form',
     (
@@ -42,6 +38,10 @@ def test_oder_of_comments(client, news_object):
         (pytest.lazy_fixture('author_client'), True)
     )
 )
-def test_comment_form_for_different_users(user, is_there_form, news_object):
-    response = user.get(get_url(NEWS_DETAIL, news_object.pk))
+def test_comment_form_for_different_users(
+    user, is_there_form, news_detail_url
+):
+    response = user.get(news_detail_url)
     assert ('form' in response.context) == is_there_form
+    if is_there_form:
+        assert isinstance(response.context['form'], CommentForm)
