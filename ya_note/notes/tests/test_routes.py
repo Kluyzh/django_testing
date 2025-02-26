@@ -6,7 +6,8 @@ from django.urls import reverse
 
 from notes.models import Note
 
-from .constants import *
+from .constants import (ADD, DELETE, DETAIL, EDIT, HOME, LIST, LOGIN, LOGOUT,
+                        SIGNUP, SUCCESS)
 
 User = get_user_model()
 
