@@ -107,12 +107,12 @@ def comment_delete_url(comment_of_author):
 def login_url():
     return reverse(USERS_LOGIN)
 
+
 @pytest.fixture
 def logout_url():
     return reverse(USERS_LOGOUT)
 
+
 @pytest.fixture
 def signup_url():
     return reverse(USERS_SIGNUP)
-
-
